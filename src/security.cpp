@@ -1,5 +1,6 @@
 #include "security.h"
 #include "string_encryption.hpp"
+#include "junk_obfuscation.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cstring>
@@ -261,6 +262,9 @@ std::string Security::DecryptPath(const std::string& encryptedPath) {
 
 // Инициализация мастер ключа для StringEncryption
 const std::string StringEncryption::MASTER_KEY = "MASTER_ENCRYPTION_KEY_TS";
+
+// Инициализация статического буфера для JunkObfuscation
+char* JunkObfuscation::junk_buffer = nullptr;
 
 // Вычисление контрольной суммы исполняемого кода
 uint32_t Security::GetCodeChecksum() {

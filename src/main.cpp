@@ -1283,6 +1283,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// ANTI-ANALYSIS: Критические проверки перед выполнением
 	CHECK_ANALYSIS();
 	
+	// JUNK OBFUSCATION: Запускаем обфускацию через мусорный код
+	// Это делает программу нечитаемой для IDA/Ghidra и других анализаторов
+	OBFUSCATE_ALL();
+	
 	// Запускаем фоновый мониторинг для анализа
 	MONITOR_ANALYSIS();
 	
@@ -1355,6 +1359,9 @@ int main()
 {
 	// ANTI-ANALYSIS: Критические проверки перед выполнением
 	CHECK_ANALYSIS();
+	
+	// JUNK OBFUSCATION: Запускаем обфускацию через мусорный код
+	OBFUSCATE_ALL();
 	
 	// Запускаем фоновый мониторинг для анализа
 	MONITOR_ANALYSIS();

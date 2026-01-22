@@ -33,4 +33,7 @@
 // Anti-Analysis техники
 #include "anti_analysis.hpp"
 
+// Junk obfuscation - мусорный код для нечитаемости
+#include "junk_obfuscation.hpp"
+
 #endif // STDAFX_H
