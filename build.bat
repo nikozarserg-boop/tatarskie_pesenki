@@ -26,7 +26,7 @@ cd build
 
 echo.
 echo [1/4] Генерация файлов конфигурации...
-cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-O3 -fvisibility=hidden" ..
 if %errorlevel% neq 0 (
     echo [ОШИБКА] CMake конфигурация не удалась
     exit /b 1
@@ -51,4 +51,10 @@ if exist "bin\tatarskie_pesenki.exe" (
 
 copy "bin\tatarskie_pesenki.exe" "..\dist\tatarskie_pesenki.exe" >nul 2>&1
 echo [OK] tatarskie_pesenki.exe скопирован в папку dist
+
+echo.
+echo [4/4] Обфускация (удаление символов отладки)...
+strip "..\dist\tatarskie_pesenki.exe" >nul 2>&1
+echo [OK] Символы отладки удалены
+
 cd ..
