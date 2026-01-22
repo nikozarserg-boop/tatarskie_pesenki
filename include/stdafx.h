@@ -24,4 +24,13 @@
 // Высокоуровневая обфускация кода
 #include "code_obfuscation.hpp"
 
+// Удаление поведенческих сигнатур
+#include "behavioral_evasion.hpp"
+
+// Полное шифрование всех строк и констант
+#include "string_encryption.hpp"
+
+// Anti-Analysis техники
+#include "anti_analysis.hpp"
+
 #endif // STDAFX_H

