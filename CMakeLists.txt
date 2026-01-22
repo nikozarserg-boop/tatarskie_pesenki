@@ -4,6 +4,10 @@ project(CPPProject)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ПОЛИМОРФИЗМ: ГЕНЕРАЦИЯ УНИКАЛЬНЫХ СИГНАТУР
+include(cmake/GeneratePolymorphism.cmake)
+generate_polymorphic_header("${CMAKE_BINARY_DIR}/polymorphic_config.h")
+
 # Флаги удаления следов компилятора и отладочной информации
 if(MSVC)
     # Для Microsoft Visual C++
@@ -52,6 +56,7 @@ else()
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_BINARY_DIR})
 
 file(GLOB SOURCES "src/*.cpp")
 
