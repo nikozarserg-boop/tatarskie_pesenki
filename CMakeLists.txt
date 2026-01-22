@@ -4,6 +4,53 @@ project(CPPProject)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Флаги удаления следов компилятора и отладочной информации
+if(MSVC)
+    # Для Microsoft Visual C++
+    string(REGEX REPLACE "/DEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /Oi /Ot /GL /Gm- /Gy /fp:fast /arch:AVX2")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /SUBSYSTEM:WINDOWS /LTCG /OPT:REF /OPT:ICF /STRIP")
+elseif(MINGW)
+    # Для MinGW на Windows
+    # Оптимизация
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+    
+    # Удаление debug информации и frame pointer
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fomit-frame-pointer")
+    
+    # Статическое линковние библиотек GCC и стандартной библиотеки C++
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+    
+    # Предпочитаем статические библиотеки
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".lib" ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    
+    # Инструменты линкера (удаление символов и мёртвого кода)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s -Wl,--gc-sections")
+else()
+    # Для GCC и Clang на Linux/macOS
+    # Оптимизация
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+    
+    # Удаление debug информации и frame pointer
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fomit-frame-pointer")
+    
+    # Полное статическое линковние всех библиотек
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static -static-libgcc -static-libstdc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
+    
+    # Предпочитаем статические библиотеки
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".lib" ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    
+    # Удаление версионной информации и комментариев
+    if(UNIX AND NOT APPLE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--strip-debug -Wl,--remove-section=.comment -Wl,--remove-section=.note*")
+    endif()
+    
+    # Инструменты линкера (удаление символов и мёртвого кода)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s -Wl,--gc-sections")
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 file(GLOB SOURCES "src/*.cpp")
