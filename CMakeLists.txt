@@ -14,6 +14,9 @@ else()
     set(RESOURCES "")
 endif()
 
+# Добавляем модуль безопасности
+list(APPEND SOURCES "src/security.cpp")
+
 if(WIN32)
     add_executable(tatarskiespesenki WIN32 ${SOURCES} ${RESOURCES})
 else()
