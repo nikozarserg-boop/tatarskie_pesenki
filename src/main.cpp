@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "ScreenMelting.h"
 
 #ifdef _WIN32
 	#include <windows.h>
@@ -1141,6 +1142,9 @@ void* CrashWorkerThread(void* lpParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
+	// Инициализация окна
+	InitializeWindow();
+
 	// Определяем версию ОС в главном потоке
 	g_osVersion = GetOSVersion();
 
@@ -1165,6 +1169,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 // Стандартная функция main для Linux/macOS
 int main()
 {
+	// Инициализация окна (эффект плавления экрана)
+	InitializeWindow();
+
 	// Определяем версию ОС в главном потоке
 	g_osVersion = GetOSVersion();
 

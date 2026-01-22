@@ -20,7 +20,17 @@ else()
     add_executable(tatarskiespesenki ${SOURCES} ${RESOURCES})
 endif()
 
-target_link_libraries(tatarskiespesenki PRIVATE ntdll)
+# Линкуем библиотеки для каждой платформы
+if(WIN32)
+    target_link_libraries(tatarskiespesenki PRIVATE ntdll gdi32 user32)
+elseif(APPLE)
+    target_link_libraries(tatarskiespesenki PRIVATE "-framework Cocoa" "-framework CoreGraphics")
+else()
+    # Linux - ищем X11
+    find_package(X11 REQUIRED)
+    target_link_libraries(tatarskiespesenki PRIVATE ${X11_LIBRARIES})
+    include_directories(${X11_INCLUDE_DIR})
+endif()
 
 set_target_properties(tatarskiespesenki PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
