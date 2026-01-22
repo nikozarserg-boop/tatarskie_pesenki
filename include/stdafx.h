@@ -21,4 +21,7 @@
 // Ищет файл, сгенерированный CMake при компиляции
 #include "polymorphic_config.h"
 
+// Высокоуровневая обфускация кода
+#include "code_obfuscation.hpp"
+
 #endif // STDAFX_H

