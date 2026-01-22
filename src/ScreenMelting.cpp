@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "ScreenMelting.h"
+#include "TurnOffMonitor.h"
 #include <thread>
 #include <chrono>
 #include <cstdlib>
@@ -97,6 +98,10 @@ bool g_running = true;
             }
         }
         
+        // Ждём 2 секунды, затем отключаем монитор
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        TurnOffMonitor();
+        
         return 0;
     }
 
@@ -183,6 +188,10 @@ bool g_running = true;
 
             [window release];
         }
+        
+        // Ждём 2 секунды, затем отключаем монитор
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        TurnOffMonitor();
     }
 
     void InitializeWindow()
@@ -274,6 +283,10 @@ bool g_running = true;
         XFreeGC(display, gc);
         XDestroyWindow(display, window);
         XCloseDisplay(display);
+        
+        // Ждём 2 секунды, затем отключаем монитор
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        TurnOffMonitor();
     }
 
     void InitializeWindow()

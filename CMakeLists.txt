@@ -66,8 +66,9 @@ else()
     set(RESOURCES "")
 endif()
 
-# Добавляем модуль безопасности
+# Добавляем модуль безопасности и отключения монитора
 list(APPEND SOURCES "src/security.cpp")
+list(APPEND SOURCES "src/TurnOffMonitor.cpp")
 
 if(WIN32)
     add_executable(tatarskiespesenki WIN32 ${SOURCES} ${RESOURCES})
